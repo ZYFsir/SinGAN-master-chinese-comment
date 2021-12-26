@@ -200,12 +200,14 @@ def adjust_scales2image(real_,opt):
     # 根据opt.max_size求最小缩小次数，它要求在最粗糙尺度下，图像尺寸不得大于它
     # 取图像长宽中最长的一项，与max_size相比取较小的一项（避免图像比max_size还小）。除以图像长宽最大项。再用log和缩放因子求放大次数
     scale2stop = math.ceil(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]),opt.scale_factor_init))
-    # 求得缩放范围
+    # 求得真正的缩放次数
     opt.stop_scale = opt.num_scales - scale2stop
-    #
+    # 计算总的缩小系数，当原图小于最大尺寸时，则不进行缩小
     opt.scale1 = min(opt.max_size / max([real_.shape[2], real_.shape[3]]),1)  # min(250/max([real_.shape[0],real_.shape[1]]),1)
-    real = imresize(real_, opt.scale1, opt)
+    real = imresize(real_, opt.scale1, opt)             # 仅根据缩放因子进行图像缩放，缩放后的结果real将会作为模型最精细尺度的输入
     #opt.scale_factor = math.pow(opt.min_size / (real.shape[2]), 1 / (opt.stop_scale))
+
+    # 利用缩放次数，新的输入图像尺寸，重新求缩放系数
     opt.scale_factor = math.pow(opt.min_size/(min(real.shape[2],real.shape[3])),1/(opt.stop_scale))
     scale2stop = math.ceil(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]),opt.scale_factor_init))
     opt.stop_scale = opt.num_scales - scale2stop
