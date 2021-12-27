@@ -193,6 +193,9 @@ def save_networks(netG,netD,z,opt):
     torch.save(z, '%s/z_opt.pth' % (opt.outf))
 
 def adjust_scales2image(real_,opt):
+    # 函数作用：保证输入图像尺寸在一定范围内（opt.min_size, opt.max_size）
+    # 返回：缩放后的图片
+    
     #opt.num_scales = int((math.log(math.pow(opt.min_size / (real_.shape[2]), 1), opt.scale_factor_init))) + 1
     
     # 求出从最底层到输出为真实图片尺寸需要多少层

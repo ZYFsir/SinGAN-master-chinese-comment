@@ -25,6 +25,6 @@ if __name__ == '__main__':
         except OSError:
             pass
         real = functions.read_image(opt)                # 获取原图像
-        functions.adjust_scales2image(real, opt)        # 归一处理？
+        functions.adjust_scales2image(real, opt)        # 保证输入图像尺寸在一定范围内
         train(opt, Gs, Zs, reals, NoiseAmp)             # 模型训练
         SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt)       # 生成不同样本
