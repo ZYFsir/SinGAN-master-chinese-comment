@@ -17,7 +17,7 @@ if __name__ == '__main__':
     NoiseAmp = []
     dir2save = functions.generate_dir2save(opt)         # 根据不同任务，生成不同的结果存储路径
 
-    if (os.path.exists(dir2save))==False:
+    if (os.path.exists(dir2save))==False:   # TODO:此处修改了一下便于debug，正式运行时记得删除==False
         print('trained model already exist')
     else:
         try:
@@ -25,6 +25,6 @@ if __name__ == '__main__':
         except OSError:
             pass
         real = functions.read_image(opt)                # 获取原图像
-        functions.adjust_scales2image(real, opt)        # 调整图像大小，计算缩放因子及缩放次数
+        functions.adjust_scales2image(real, opt)        # 保证输入图像尺寸在一定范围内
         train(opt, Gs, Zs, reals, NoiseAmp)             # 模型训练
         SinGAN_generate(Gs,Zs,reals,NoiseAmp,opt)       # 生成不同样本

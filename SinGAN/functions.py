@@ -194,15 +194,24 @@ def save_networks(netG,netD,z,opt):
     torch.save(z, '%s/z_opt.pth' % (opt.outf))
 
 def adjust_scales2image(real_,opt):
+    # 函数作用：保证输入图像尺寸在一定范围内（opt.min_size, opt.max_size）
+    # 返回：缩放后的图片
+    
     #opt.num_scales = int((math.log(math.pow(opt.min_size / (real_.shape[2]), 1), opt.scale_factor_init))) + 1
+    
+    # 求出从最底层到输出为真实图片尺寸需要多少层
     # 根据opt.min_size求最大缩小次数，它要求在最粗糙的尺度条件下，图像尺寸不得小于它
     # 先根据图像长宽取较短的一项，使用缩小后的最短尺寸除以它。用pow虚晃一枪后，使用缩放因子与log求究竟缩了几次，再用ceil取整，得到放缩次数
     opt.num_scales = math.ceil((math.log(math.pow(opt.min_size / (min(real_.shape[2], real_.shape[3])), 1), opt.scale_factor_init))) + 1
     # 根据opt.max_size求最小缩小次数，它要求在最粗糙尺度下，图像尺寸不得大于它
     # 取图像长宽中最长的一项，与max_size相比取较小的一项（避免图像比max_size还小）。除以图像长宽最大项。再用log和缩放因子求放大次数
     scale2stop = math.ceil(math.log(min([opt.max_size, max([real_.shape[2], real_.shape[3]])]) / max([real_.shape[2], real_.shape[3]]),opt.scale_factor_init))
+    
     # 求得真正的缩放次数
+    # 在满足最后生成图片小于最大尺寸的情况下， 从最底层输入大小到最后一层输出大小需要多少层。
     opt.stop_scale = opt.num_scales - scale2stop
+    
+    # 保证图像尺寸不大于opt.max_size 
     # 计算总的缩小系数，当原图小于最大尺寸时，则不进行缩小
     opt.scale1 = min(opt.max_size / max([real_.shape[2], real_.shape[3]]),1)  # min(250/max([real_.shape[0],real_.shape[1]]),1)
     real = imresize(real_, opt.scale1, opt)             # 仅根据缩放因子进行图像缩放，缩放后的结果real将会作为模型最精细尺度的输入
