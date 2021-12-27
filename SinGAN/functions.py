@@ -138,11 +138,19 @@ def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
 
     disc_interpolates = netD(interpolates)
 
+    # 计算模型梯度
+    # 其中的grad_outputs表示后向传播中上层传入的梯度，默认为None，这里设为1其实也是一样的（所以该参数多余）
+    # retain_graph并不推荐设为True，大部分情况下有更有效率的做法
+    # only_inputs参数则已经过时，会被忽略掉。如果想积累来自其他部分的梯度，可以用backward替代
+    # 返回值会是tuple，其中有多个tensor（如果inputs和outputs是很多个tensor的话）
+    # 由于这里的inputs和outputs均只有1个，对输出取[0]即可得到梯度tensor
     gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates,
                               grad_outputs=torch.ones(disc_interpolates.size()).to(device),#.cuda(), #if use_cuda else torch.ones(
                                   #disc_interpolates.size()),
                               create_graph=True, retain_graph=True, only_inputs=True)[0]
     #LAMBDA = 1
+    # 将权重沿着通道方向求2范数，减一平方后整个输出图像的均值作为对梯度权重的惩罚项
+    # LAMBDA则是控制该惩罚项的超参数
     gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * LAMBDA
     return gradient_penalty
 

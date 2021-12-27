@@ -69,20 +69,24 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
     opt.nzx = real.shape[2]#+(opt.ker_size-1)*(opt.num_layer)
     opt.nzy = real.shape[3]#+(opt.ker_size-1)*(opt.num_layer)
     opt.receptive_field = opt.ker_size + ((opt.ker_size-1)*(opt.num_layer-1))*opt.stride        # 计算感受野
+    # 为保证每层经过网络后图像尺寸不变，需要设置好padding大小
+    # 对于3x3卷积核，每卷积一次图像长宽各减少2像素（即opt.ker_size-1），乘以层数则得到经过整个网络后，长宽减少的像素数目
+    # 求padding则需要再除以二，并取int值
     pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)
     pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)
     if opt.mode == 'animation_train':
+        # 该模式下特意设置了噪声图的padding
         opt.nzx = real.shape[2]+(opt.ker_size-1)*(opt.num_layer)
         opt.nzy = real.shape[3]+(opt.ker_size-1)*(opt.num_layer)
         pad_noise = 0
-    m_noise = nn.ZeroPad2d(int(pad_noise))          # 零填充函数
+    m_noise = nn.ZeroPad2d(int(pad_noise))          # 零填充函数，这里的int多余了
     m_image = nn.ZeroPad2d(int(pad_image))
 
     alpha = opt.alpha
 
     fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)    # 生成噪声（有多种噪声可选）,参数为size(长度为3的list)和device
     z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)            # 以0填充为fixed_noise尺寸相同的矩阵
-    z_opt = m_noise(z_opt)
+    z_opt = m_noise(z_opt)      # 最噪声矩阵进行padding，生成真正需要用的噪声0矩阵
 
     # setup optimizer
     optimizerD = optim.Adam(netD.parameters(), lr=opt.lr_d, betas=(opt.beta1, 0.999))
@@ -98,7 +102,9 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
 
     for epoch in range(opt.niter):
         if (Gs == []) & (opt.mode != 'SR_train'):
+            # 先按通道数为1生成噪声矩阵
             z_opt = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)
+            # 再利用expand，复制成3个通道数，再padding
             z_opt = m_noise(z_opt.expand(1,3,opt.nzx,opt.nzy))
             noise_ = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)
             noise_ = m_noise(noise_.expand(1,3,opt.nzx,opt.nzy))
@@ -109,21 +115,26 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
         ############################
         # (1) Update D network: maximize D(x) + D(G(z))
         ###########################
-        for j in range(opt.Dsteps):
+        for j in range(opt.Dsteps):         # 为D网络更新3次
             # train with real
             netD.zero_grad()
 
+            # 马尔可夫判别器体现在这个netD是卷积网络，输出是幅图像
+            # 真假概率为输出图像的均值
             output = netD(real).to(opt.device)
             #D_real_map = output.detach()
+            # 希望real输出越小越好，故加负号
             errD_real = -output.mean()#-a
             errD_real.backward(retain_graph=True)
             D_x = -errD_real.item()
 
             # train with fake
-            if (j==0) & (epoch == 0):
+            if (j==0) & (epoch == 0):       # 刚开始训练时
                 if (Gs == []) & (opt.mode != 'SR_train'):
+                    # 用0填充，创建矩阵
                     prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)
                     in_s = prev
+                    # 进行padding
                     prev = m_image(prev)
                     z_prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)
                     z_prev = m_noise(z_prev)
@@ -155,9 +166,11 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
                 noise = noise_
             else:
                 noise = opt.noise_amp*noise_+prev
-
+            # detach函数返回的tensor，已经从梯度图剥离出来了，无法求梯度
+            # 指向的是同一片内存，如果进行in-place操作，会报错
             fake = netG(noise.detach(),prev)
             output = netD(fake.detach())
+            # 这里希望fake输出越大越好
             errD_fake = output.mean()
             errD_fake.backward(retain_graph=True)
             D_G_z = output.mean().item()
@@ -165,16 +178,17 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             gradient_penalty = functions.calc_gradient_penalty(netD, real, fake, opt.lambda_grad, opt.device)
             gradient_penalty.backward()
 
+            # 这才是完整的判别器损失，但我不太理解它为什么不一次性backward，非要分开
             errD = errD_real + errD_fake + gradient_penalty
             optimizerD.step()
 
-        errD2plot.append(errD.detach())
+        errD2plot.append(errD.detach())         # 记录判别器损失
 
         ############################
         # (2) Update G network: maximize D(G(z))
         ###########################
 
-        for j in range(opt.Gsteps):
+        for j in range(opt.Gsteps):             # 再为生成器更新3次
             netG.zero_grad()
             output = netD(fake)
             #D_fake_map = output.detach()
@@ -195,7 +209,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
 
             optimizerG.step()
 
-        errG2plot.append(errG.detach()+rec_loss)
+        errG2plot.append(errG.detach()+rec_loss)            # 存储生成器误差
         D_real2plot.append(D_x)
         D_fake2plot.append(D_G_z)
         z_opt2plot.append(rec_loss)
