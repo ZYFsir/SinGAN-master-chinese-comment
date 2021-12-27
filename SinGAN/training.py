@@ -9,19 +9,19 @@ import matplotlib.pyplot as plt
 from SinGAN.imresize import imresize
 
 def train(opt,Gs,Zs,reals,NoiseAmp):
-    real_ = functions.read_image(opt)               # 读取图像
+    real_ = functions.read_image(opt)                           # 读取图像
     in_s = 0
     scale_num = 0
-    real = imresize(real_,opt.scale1,opt)
-    reals = functions.creat_reals_pyramid(real,reals,opt)
+    real = imresize(real_,opt.scale1,opt)                       # 获取输入图像
+    reals = functions.creat_reals_pyramid(real,reals,opt)       # 生成ground truth金字塔
     nfc_prev = 0
 
-    while scale_num<opt.stop_scale+1:
-        opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)
-        opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)
+    while scale_num<opt.stop_scale+1:                           # 对金字塔的每级进行一次训练，从最粗糙到最精细
+        opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)            # 原论文：每放大4次，就使通道数提高两倍。这里还额外限制通道数不大于128
+        opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)    # TODO：这个就看不出有什么目的了
 
-        opt.out_ = functions.generate_dir2save(opt)
-        opt.outf = '%s/%d' % (opt.out_,scale_num)
+        opt.out_ = functions.generate_dir2save(opt)         # 生成要保存图像的文件夹
+        opt.outf = '%s/%d' % (opt.out_,scale_num)           # 生成文件名
         try:
             os.makedirs(opt.outf)
         except OSError:
@@ -29,15 +29,18 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
 
         #plt.imsave('%s/in.png' %  (opt.out_), functions.convert_image_np(real), vmin=0, vmax=1)
         #plt.imsave('%s/original.png' %  (opt.out_), functions.convert_image_np(real_), vmin=0, vmax=1)
+        # 保存真实金字塔图像
         plt.imsave('%s/real_scale.png' %  (opt.outf), functions.convert_image_np(reals[scale_num]), vmin=0, vmax=1)
 
-        D_curr,G_curr = init_models(opt)
-        if (nfc_prev==opt.nfc):
+        D_curr,G_curr = init_models(opt)                        # 初始化模型
+        if (nfc_prev==opt.nfc):         # 如果通道数比起上一次层并没有增加，则使用上一层的训练参数
             G_curr.load_state_dict(torch.load('%s/%d/netG.pth' % (opt.out_,scale_num-1)))
             D_curr.load_state_dict(torch.load('%s/%d/netD.pth' % (opt.out_,scale_num-1)))
 
+        # 在当前尺度上进行训练
         z_curr,in_s,G_curr = train_single_scale(D_curr,G_curr,reals,Gs,Zs,in_s,NoiseAmp,opt)
 
+        # 梯度清零
         G_curr = functions.reset_grads(G_curr,False)
         G_curr.eval()
         D_curr = functions.reset_grads(D_curr,False)
@@ -62,22 +65,23 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
 def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
 
     real = reals[len(Gs)]
+    # 根据图像求噪声宽高
     opt.nzx = real.shape[2]#+(opt.ker_size-1)*(opt.num_layer)
     opt.nzy = real.shape[3]#+(opt.ker_size-1)*(opt.num_layer)
-    opt.receptive_field = opt.ker_size + ((opt.ker_size-1)*(opt.num_layer-1))*opt.stride
+    opt.receptive_field = opt.ker_size + ((opt.ker_size-1)*(opt.num_layer-1))*opt.stride        # 计算感受野
     pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)
     pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)
     if opt.mode == 'animation_train':
         opt.nzx = real.shape[2]+(opt.ker_size-1)*(opt.num_layer)
         opt.nzy = real.shape[3]+(opt.ker_size-1)*(opt.num_layer)
         pad_noise = 0
-    m_noise = nn.ZeroPad2d(int(pad_noise))
+    m_noise = nn.ZeroPad2d(int(pad_noise))          # 零填充函数
     m_image = nn.ZeroPad2d(int(pad_image))
 
     alpha = opt.alpha
 
-    fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)
-    z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)
+    fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)    # 生成噪声（有多种噪声可选）,参数为size(长度为3的list)和device
+    z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)            # 以0填充为fixed_noise尺寸相同的矩阵
     z_opt = m_noise(z_opt)
 
     # setup optimizer

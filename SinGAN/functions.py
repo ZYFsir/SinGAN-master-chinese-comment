@@ -148,8 +148,9 @@ def calc_gradient_penalty(netD, real_data, fake_data, LAMBDA, device):
 
 def read_image(opt):
     x = img.imread('%s/%s' % (opt.input_dir,opt.input_name))            # 将图像读为numpy矩阵
+    # 但实际上读取到的是4个通道，毕竟是png
     x = np2torch(x,opt)                                                 # 转为torch格式
-    x = x[:,0:3,:,:]                # TODO：我不能理解
+    x = x[:,0:3,:,:]                # 仅取前三个通道，忽略Alpha通道
     return x
 
 def read_image_dir(dir,opt):
@@ -169,7 +170,7 @@ def np2torch(x,opt):
     x = torch.from_numpy(x)                     # numpy转torch
     if not(opt.not_cuda):
         x = move_to_gpu(x)                      # 若有GPU则放到GPU中
-    x = x.type(torch.cuda.FloatTensor) if not(opt.not_cuda) else x.type(torch.FloatTensor)  # TODO：这什么鬼
+    x = x.type(torch.cuda.FloatTensor) if not(opt.not_cuda) else x.type(torch.FloatTensor)  # 根据是否有GPU判断应该转换为什么类型
     #x = x.type(torch.FloatTensor)
     x = norm(x)                                 # 再归一化一下
     return x
@@ -227,12 +228,12 @@ def adjust_scales2image_SR(real_,opt):
     return real
 
 def creat_reals_pyramid(real,reals,opt):
-    real = real[:,0:3,:,:]
+    real = real[:,0:3,:,:]                # 该步骤是多余的，本来就只有3个通道了，它又取了一次前3通道
     for i in range(0,opt.stop_scale+1,1):
         scale = math.pow(opt.scale_factor,opt.stop_scale-i)
         curr_real = imresize(real,scale,opt)
         reals.append(curr_real)
-    return reals
+    return reals                                                # 总之是根据缩放次数生成了尺寸不同的真实图像
 
 
 def load_trained_pyramid(opt, mode_='train'):

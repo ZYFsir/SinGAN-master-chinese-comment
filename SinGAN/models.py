@@ -5,6 +5,8 @@ import torch.nn.functional as F
 
 
 class ConvBlock(nn.Sequential):
+    # 论文中写道：conv block由cov(3x3) - BN - LeakyReLU(0.2)
+    # LeakyReLU的斜率是在附加材料中提到的。
     def __init__(self, in_channel, out_channel, ker_size, padd, stride):
         super(ConvBlock,self).__init__()
         self.add_module('conv',nn.Conv2d(in_channel ,out_channel,kernel_size=ker_size,stride=stride,padding=padd)),
