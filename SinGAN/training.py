@@ -31,13 +31,14 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
         #plt.imsave('%s/original.png' %  (opt.out_), functions.convert_image_np(real_), vmin=0, vmax=1)
         # 保存真实金字塔图像
         plt.imsave('%s/real_scale.png' %  (opt.outf), functions.convert_image_np(reals[scale_num]), vmin=0, vmax=1)
-
-        D_curr,G_curr = init_models(opt)                        # 初始化模型
+        # 初始化模型,D_curr初始化为WDiscriminator类，G_curr初始化为GeneratorConcatSkip2CleanAdd类
+        D_curr,G_curr = init_models(opt)
         if (nfc_prev==opt.nfc):         # 如果通道数比起上一次层并没有增加，则使用上一层的训练参数
             G_curr.load_state_dict(torch.load('%s/%d/netG.pth' % (opt.out_,scale_num-1)))
             D_curr.load_state_dict(torch.load('%s/%d/netD.pth' % (opt.out_,scale_num-1)))
 
         # 在当前尺度上进行训练
+        #
         z_curr,in_s,G_curr = train_single_scale(D_curr,G_curr,reals,Gs,Zs,in_s,NoiseAmp,opt)
 
         # 梯度清零
@@ -63,7 +64,6 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
 
 
 def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
-
     real = reals[len(Gs)]
     # 根据图像求噪声宽高
     opt.nzx = real.shape[2]#+(opt.ker_size-1)*(opt.num_layer)
@@ -131,6 +131,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             # train with fake
             if (j==0) & (epoch == 0):       # 刚开始训练时
                 if (Gs == []) & (opt.mode != 'SR_train'):
+                    # 对于第一次训练，上层生成结果prev全取0
                     # 用0填充，创建矩阵
                     prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)
                     in_s = prev

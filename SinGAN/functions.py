@@ -328,8 +328,8 @@ def post_config(opt):
 
 def calc_init_scale(opt):
     in_scale = math.pow(1/2,1/3)
-    iter_num = round(math.log(1 / opt.sr_factor, in_scale))
-    in_scale = pow(opt.sr_factor, 1 / iter_num)
+    iter_num = round(math.log(1 / opt.sr_factor, in_scale))     # 循环次数，这里取了3 * log2(s)。取任意整数其实都可以
+    in_scale = pow(opt.sr_factor, 1 / iter_num)                 # 单次缩放倍数，论文里有提及
     return in_scale,iter_num
 
 def quant(prev,device):

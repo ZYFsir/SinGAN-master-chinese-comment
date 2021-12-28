@@ -29,10 +29,10 @@ if __name__ == '__main__':
             pass
 
         mode = opt.mode
-        in_scale, iter_num = functions.calc_init_scale(opt)
-        opt.scale_factor = 1 / in_scale
-        opt.scale_factor_init = 1 / in_scale
-        opt.mode = 'train'
+        in_scale, iter_num = functions.calc_init_scale(opt)             # 获得了每层放大倍数及循环次数
+        opt.scale_factor = 1 / in_scale                                 # 取倒数后便是每层缩小倍数
+        opt.scale_factor_init = 1 / in_scale                            # scale_factor_init可以被忽略，因为没有被使用过
+        opt.mode = 'train'                                              # 这个是真的令人迷惑，明明training.py里还有对'SR_train'的判断，这里却把mode设为'train'
         dir2trained_model = functions.generate_dir2save(opt)
         if (os.path.exists(dir2trained_model)):
             Gs, Zs, reals, NoiseAmp = functions.load_trained_pyramid(opt)
@@ -53,7 +53,8 @@ if __name__ == '__main__':
         real_ = real
         opt.scale_factor = 1 / in_scale
         opt.scale_factor_init = 1 / in_scale
-        for j in range(1, iter_num + 1, 1):
+        for j in range(1, iter_num + 1, 1):                     # 需要进行iter_num次放大迭代
+            # 先将升采样图片序列，保存到reals_sr中
             real_ = imresize(real_, pow(1 / opt.scale_factor, 1), opt)
             reals_sr.append(real_)
             Gs_sr.append(Gs[-1])

@@ -56,10 +56,10 @@ class GeneratorConcatSkip2CleanAdd(nn.Module):
             nn.Conv2d(max(N,opt.min_nfc),opt.nc_im,kernel_size=opt.ker_size,stride =1,padding=opt.padd_size),
             nn.Tanh()
         )
-    def forward(self,x,y):
-        x = self.head(x)
+    def forward(self,x,y):                                                      # x为该层噪声，y为上层生成结果的上采样，两者都经过了padding
+        x = self.head(x)                                                        # x经过5层卷积，其长宽会小于y，所以在输出时需要减小y的大小
         x = self.body(x)
         x = self.tail(x)
-        ind = int((y.shape[2]-x.shape[2])/2)                                    # ？？ x噪声？y上个G输出图像的的上采样版本？
-        y = y[:,:,ind:(y.shape[2]-ind),ind:(y.shape[3]-ind)]                    # ？？
+        ind = int((y.shape[2]-x.shape[2])/2)                                    # 他的做法是求出卷积使长边减少的像素数目（宽边与之相同）
+        y = y[:,:,ind:(y.shape[2]-ind),ind:(y.shape[3]-ind)]                    # 让y长宽两侧各删去该数目一半的像素，使得x,y尺寸一致。如果我们用imresize说不定效果会更好哦（不过不知道这样还能不能执行backward了）
         return x+y                                                              # 输出叠加部分
