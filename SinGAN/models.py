@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 
 class ConvBlock(nn.Sequential):
-    # 论文中写道：conv block由cov(3x3) - BN - LeakyReLU(0.2)
+    # 论文中写到：conv block由cov(3x3) - BN - LeakyReLU(0.2)
     # LeakyReLU的斜率是在附加材料中提到的。
     def __init__(self, in_channel, out_channel, ker_size, padd, stride):
         super(ConvBlock,self).__init__()
@@ -60,6 +60,6 @@ class GeneratorConcatSkip2CleanAdd(nn.Module):
         x = self.head(x)
         x = self.body(x)
         x = self.tail(x)
-        ind = int((y.shape[2]-x.shape[2])/2)
-        y = y[:,:,ind:(y.shape[2]-ind),ind:(y.shape[3]-ind)]
-        return x+y
+        ind = int((y.shape[2]-x.shape[2])/2)                                    # ？？ x噪声？y上个G输出图像的的上采样版本？
+        y = y[:,:,ind:(y.shape[2]-ind),ind:(y.shape[3]-ind)]                    # ？？
+        return x+y                                                              # 输出叠加部分
