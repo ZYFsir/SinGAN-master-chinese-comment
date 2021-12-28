@@ -56,7 +56,9 @@ class GeneratorConcatSkip2CleanAdd(nn.Module):
             nn.Conv2d(max(N,opt.min_nfc),opt.nc_im,kernel_size=opt.ker_size,stride =1,padding=opt.padd_size),
             nn.Tanh()
         )
-    def forward(self,x,y):                                                      # x为该层噪声，y为上层生成结果的上采样，两者都经过了padding
+    def forward(self,x,y):
+        # x为该层噪声，y为上层生成结果的上采样，两者都经过了padding
+        # 注意这里的x其实已经添加过y了
         x = self.head(x)                                                        # x经过5层卷积，其长宽会小于y，所以在输出时需要减小y的大小
         x = self.body(x)
         x = self.tail(x)

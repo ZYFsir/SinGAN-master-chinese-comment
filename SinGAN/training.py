@@ -16,7 +16,8 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
     reals = functions.creat_reals_pyramid(real,reals,opt)       # 生成ground truth金字塔
     nfc_prev = 0
 
-    while scale_num<opt.stop_scale+1:                           # 对金字塔的每级进行一次训练，从最粗糙到最精细
+    while scale_num<opt.stop_scale+1:                           # 对金字塔的每级进行opt.iter_num次训练，从最粗糙到最精细
+        # 震惊，他竟然是训练好了一层才继续下一层
         opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)            # 原论文：每放大4次，就使通道数提高两倍。这里还额外限制通道数不大于128
         opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)    # TODO：这个就看不出有什么目的了
 
@@ -38,7 +39,7 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
             D_curr.load_state_dict(torch.load('%s/%d/netD.pth' % (opt.out_,scale_num-1)))
 
         # 在当前尺度上进行训练
-        #
+        # 得到了当前尺度的噪声输入z_curr,当前尺度的上层信号输入in_s和训练好的生成器模型
         z_curr,in_s,G_curr = train_single_scale(D_curr,G_curr,reals,Gs,Zs,in_s,NoiseAmp,opt)
 
         # 梯度清零
@@ -47,9 +48,9 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
         D_curr = functions.reset_grads(D_curr,False)
         D_curr.eval()
 
-        Gs.append(G_curr)
-        Zs.append(z_curr)
-        NoiseAmp.append(opt.noise_amp)
+        Gs.append(G_curr)       # Gs是生成器金字塔
+        Zs.append(z_curr)       # Zs则记录各层噪声
+        NoiseAmp.append(opt.noise_amp)      # 记录当前噪声倍数
 
         torch.save(Zs, '%s/Zs.pth' % (opt.out_))
         torch.save(Gs, '%s/Gs.pth' % (opt.out_))
@@ -57,7 +58,7 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
         torch.save(NoiseAmp, '%s/NoiseAmp.pth' % (opt.out_))
 
         scale_num+=1
-        nfc_prev = opt.nfc
+        nfc_prev = opt.nfc          # 更新上层输入通道数
         del D_curr,G_curr
     return
 
@@ -82,7 +83,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
     m_noise = nn.ZeroPad2d(int(pad_noise))          # 零填充函数，这里的int多余了
     m_image = nn.ZeroPad2d(int(pad_image))
 
-    alpha = opt.alpha
+    alpha = opt.alpha       # 重建损失的系数
 
     fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)    # 生成噪声（有多种噪声可选）,参数为size(长度为3的list)和device
     z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)            # 以0填充为fixed_noise尺寸相同的矩阵
@@ -101,14 +102,18 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
     z_opt2plot = []
 
     for epoch in range(opt.niter):
-        if (Gs == []) & (opt.mode != 'SR_train'):
+        # 注意，对于每个epoch，训练的都是同一层网络。每个epoch中noise_都会重新生成。这跟论文中声称的“drawn once and kept fixed during training”有些出入
+        # 考虑到论文就是人家写的，那我也无力反驳
+        if (Gs == []) & (opt.mode != 'SR_train'):       # 如果当前训练的是G_N层
             # 先按通道数为1生成噪声矩阵
             z_opt = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)
             # 再利用expand，复制成3个通道数，再padding
             z_opt = m_noise(z_opt.expand(1,3,opt.nzx,opt.nzy))
+            # noise_与z_opt的生成方式相同
             noise_ = functions.generate_noise([1,opt.nzx,opt.nzy], device=opt.device)
             noise_ = m_noise(noise_.expand(1,3,opt.nzx,opt.nzy))
         else:
+            # 如果当前要训练的层数小于N，则噪声不要求通道复制，可直接生成
             noise_ = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy], device=opt.device)
             noise_ = m_noise(noise_)
 
@@ -129,12 +134,12 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             D_x = -errD_real.item()
 
             # train with fake
-            if (j==0) & (epoch == 0):       # 刚开始训练时
-                if (Gs == []) & (opt.mode != 'SR_train'):
+            if (j==0) & (epoch == 0):       # 如果是第一个epoch的第一次循环
+                if (Gs == []) & (opt.mode != 'SR_train'):   # 如果层数为N
                     # 对于第一次训练，上层生成结果prev全取0
                     # 用0填充，创建矩阵
                     prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)
-                    in_s = prev
+                    in_s = prev                 # 注意in_s是未经过padding的
                     # 进行padding
                     prev = m_image(prev)
                     z_prev = torch.full([1,opt.nc_z,opt.nzx,opt.nzy], 0, device=opt.device)
@@ -147,7 +152,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
                     opt.noise_amp = opt.noise_amp_init * RMSE
                     z_prev = m_image(z_prev)
                     prev = z_prev
-                else:
+                else:       # 如果当前训练层数小于N
                     prev = draw_concat(Gs,Zs,reals,NoiseAmp,in_s,'rand',m_noise,m_image,opt)
                     prev = m_image(prev)
                     z_prev = draw_concat(Gs,Zs,reals,NoiseAmp,in_s,'rec',m_noise,m_image,opt)
@@ -156,6 +161,8 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
                     opt.noise_amp = opt.noise_amp_init*RMSE
                     z_prev = m_image(z_prev)
             else:
+                # 在训练过程中，draw_concat都只是简单的返回in_s，由于这段循环内训练的是同一层，故不需要改变in_s
+                # 因此本段代码只是再次给prev做了一次padding
                 prev = draw_concat(Gs,Zs,reals,NoiseAmp,in_s,'rand',m_noise,m_image,opt)
                 prev = m_image(prev)
 
@@ -164,12 +171,12 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
                 plt.imsave('%s/prev.png' % (opt.outf), functions.convert_image_np(prev), vmin=0, vmax=1)
 
             if (Gs == []) & (opt.mode != 'SR_train'):
-                noise = noise_
+                noise = noise_          # 对于第一次训练，使用生成的噪声
             else:
                 noise = opt.noise_amp*noise_+prev
             # detach函数返回的tensor，已经从梯度图剥离出来了，无法求梯度
             # 指向的是同一片内存，如果进行in-place操作，会报错
-            fake = netG(noise.detach(),prev)
+            fake = netG(noise.detach(),prev)            # 以噪声作为噪声输入，以0作为上层输入
             output = netD(fake.detach())
             # 这里希望fake输出越大越好
             errD_fake = output.mean()
@@ -194,14 +201,14 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             output = netD(fake)
             #D_fake_map = output.detach()
             errG = -output.mean()
-            errG.backward(retain_graph=True)
+            errG.backward(retain_graph=True)        # 对应Adversarial loss中生成网络的部分
             if alpha!=0:
                 loss = nn.MSELoss()
                 if opt.mode == 'paint_train':
                     z_prev = functions.quant2centers(z_prev, centers)
                     plt.imsave('%s/z_prev.png' % (opt.outf), functions.convert_image_np(z_prev), vmin=0, vmax=1)
-                Z_opt = opt.noise_amp*z_opt+z_prev
-                rec_loss = alpha*loss(netG(Z_opt.detach(),z_prev),real)
+                Z_opt = opt.noise_amp*z_opt+z_prev              # 此时的z_prev全0，opt.noise_amp为1
+                rec_loss = alpha*loss(netG(Z_opt.detach(),z_prev),real)         # 以噪声作为噪声输入，以0作为上层输入。对应reconstruction loss
                 rec_loss.backward(retain_graph=True)
                 rec_loss = rec_loss.detach()
             else:
@@ -210,10 +217,10 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
 
             optimizerG.step()
 
-        errG2plot.append(errG.detach()+rec_loss)            # 存储生成器误差
-        D_real2plot.append(D_x)
-        D_fake2plot.append(D_G_z)
-        z_opt2plot.append(rec_loss)
+        errG2plot.append(errG.detach()+rec_loss)            # 保存生成网络误差
+        D_real2plot.append(D_x)                             # 保存判别器网络对真实图像的概率判断
+        D_fake2plot.append(D_G_z)                           # 保存判别器网络对生成图像的概率判断
+        z_opt2plot.append(rec_loss)                         # 保存Reconstruction loss
 
         if epoch % 25 == 0 or epoch == (opt.niter-1):
             print('scale %d:[%d/%d]' % (len(Gs), epoch, opt.niter))
@@ -235,25 +242,30 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
         schedulerG.step()
 
     functions.save_networks(netG,netD,z_opt,opt)
+    # 返回值是最后一次的噪声图z_opt（经过padding）,全0矩阵in_s，和训练好的生成器网络netG
     return z_opt,in_s,netG    
 
 def draw_concat(Gs,Zs,reals,NoiseAmp,in_s,mode,m_noise,m_image,opt):
     G_z = in_s
-    if len(Gs) > 0:
+    # 如果当前在训练第N层，Gs为空，因此本函数无用
+    if len(Gs) > 0:     # 如果当前训练层数小于N
         if mode == 'rand':
             count = 0
             pad_noise = int(((opt.ker_size-1)*opt.num_layer)/2)
             if opt.mode == 'animation_train':
                 pad_noise = 0
             for G,Z_opt,real_curr,real_next,noise_amp in zip(Gs,Zs,reals,reals[1:],NoiseAmp):
-                if count == 0:
+                # 对当前已经训练好的层进行遍历（zip遍历会以最短的进行截取）
+                if count == 0:          # 对于最底层
+                    # 按照未padding前的尺寸生成噪声，并要求沿通道复制
                     z = functions.generate_noise([1, Z_opt.shape[2] - 2 * pad_noise, Z_opt.shape[3] - 2 * pad_noise], device=opt.device)
                     z = z.expand(1, 3, z.shape[2], z.shape[3])
-                else:
+                else:       # 其余层的噪声则没那么多要求
                     z = functions.generate_noise([opt.nc_z,Z_opt.shape[2] - 2 * pad_noise, Z_opt.shape[3] - 2 * pad_noise], device=opt.device)
                 z = m_noise(z)
-                G_z = G_z[:,:,0:real_curr.shape[2],0:real_curr.shape[3]]
+                G_z = G_z[:,:,0:real_curr.shape[2],0:real_curr.shape[3]]        # 按照real_curr的尺寸截取G_z。实际上两者尺寸应当相等。大概只是防患于未然
                 G_z = m_image(G_z)
+                # 在将噪声输入生成网络之前，按照noise_amp叠加了上层生成图像进去。按照论文来说,noise_amp应正比于上层生成图像升采样后与当前层真实图像的RMSE
                 z_in = noise_amp*z+G_z
                 G_z = G(z_in.detach(),G_z)
                 G_z = imresize(G_z,1/opt.scale_factor,opt)
