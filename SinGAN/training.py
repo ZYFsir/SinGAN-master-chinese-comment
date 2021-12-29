@@ -89,7 +89,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
 
     fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)    # 生成噪声（有多种噪声可选）,参数为size(长度为3的list)和device
     z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)            # 以0填充为fixed_noise尺寸相同的矩阵
-    z_opt = m_noise(z_opt)      # 最噪声矩阵进行padding，生成真正需要用的噪声0矩阵
+    z_opt = m_noise(z_opt)      # 对噪声矩阵进行padding，生成真正需要用的噪声0矩阵
 
     # setup optimizer
     optimizerD = optim.Adam(netD.parameters(), lr=opt.lr_d, betas=(opt.beta1, 0.999))
@@ -188,7 +188,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
             gradient_penalty = functions.calc_gradient_penalty(netD, real, fake, opt.lambda_grad, opt.device)
             gradient_penalty.backward()
 
-            # 这才是完整的判别器损失，但我不太理解它为什么不一次性backward，非要分开
+            # 这才是完整的判别器损失，但我不太理解它为什么不一次性backward，非要分开 (我觉得可以一次性backward，可以对比其他人代码比如https://github.com/FriedRonaldo/SinGAN/blob/master/code/train.py）
             errD = errD_real + errD_fake + gradient_penalty
             optimizerD.step()
 
