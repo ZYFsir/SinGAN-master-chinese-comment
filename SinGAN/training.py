@@ -75,7 +75,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
     # 为保证每层经过网络后图像尺寸不变，需要设置好padding大小
     # 对于3x3卷积核，每卷积一次图像长宽各减少2像素（即opt.ker_size-1），乘以层数则得到经过整个网络后，长宽减少的像素数目
     # 求padding则需要再除以二，并取int值
-    pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)
+    pad_noise = int(((opt.ker_size - 1) * opt.num_layer) / 2)               ## 两个相同的？
     pad_image = int(((opt.ker_size - 1) * opt.num_layer) / 2)
     if opt.mode == 'animation_train':
         # 该模式下特意设置了噪声图的padding
@@ -87,6 +87,7 @@ def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
 
     alpha = opt.alpha       # 重建损失的系数
 
+    # 这三步操作可以变成一步操作吗？直接生成一样大的噪声矩阵？
     fixed_noise = functions.generate_noise([opt.nc_z,opt.nzx,opt.nzy],device=opt.device)    # 生成噪声（有多种噪声可选）,参数为size(长度为3的list)和device
     z_opt = torch.full(fixed_noise.shape, 0, device=opt.device)            # 以0填充为fixed_noise尺寸相同的矩阵
     z_opt = m_noise(z_opt)      # 对噪声矩阵进行padding，生成真正需要用的噪声0矩阵
