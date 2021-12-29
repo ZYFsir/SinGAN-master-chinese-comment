@@ -17,7 +17,7 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
     nfc_prev = 0
 
     while scale_num<opt.stop_scale+1:                           # 对金字塔的每级进行opt.iter_num次训练，从最粗糙到最精细
-        # 震惊，他竟然是训练好了一层才继续下一层
+        # 论文里提到：训练完一层之后固定该层的参数后再训练下一层（这样的话，使得它可以在任意层数停止下来？）
         opt.nfc = min(opt.nfc_init * pow(2, math.floor(scale_num / 4)), 128)            # 原论文：每放大4次，就使通道数提高两倍。这里还额外限制通道数不大于128
         opt.min_nfc = min(opt.min_nfc_init * pow(2, math.floor(scale_num / 4)), 128)    # TODO：这个就看不出有什么目的了
 
@@ -65,6 +65,8 @@ def train(opt,Gs,Zs,reals,NoiseAmp):
 
 
 def train_single_scale(netD,netG,reals,Gs,Zs,in_s,NoiseAmp,opt,centers=None):
+    # 得到了当前尺度的噪声输入z_curr,当前尺度的上层信号输入in_s和训练好的生成器模型
+    
     real = reals[len(Gs)]
     # 根据图像求噪声宽高
     opt.nzx = real.shape[2]#+(opt.ker_size-1)*(opt.num_layer)
